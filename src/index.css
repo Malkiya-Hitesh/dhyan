@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  html, body, #root { height: 100%; }
+  ::-webkit-scrollbar { width: 3px; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.07); border-radius: 99px; }
+}
+
+@layer components {
+  /* Card */
+  .dhyan-card {
+    @apply bg-bg-1 border border-subtle rounded-2xl p-4;
+  }
+
+  /* Input */
+  .dhyan-input {
+    @apply w-full bg-bg-3 border border-subtle rounded-xl px-3 py-2 text-ink text-sm outline-none
+           focus:border-gold/40 placeholder:text-ink-3 transition-colors duration-200;
+  }
+
+  /* Button gold */
+  .btn-gold {
+    @apply bg-gold text-bg font-sans font-semibold text-sm px-5 py-2.5 rounded-xl
+           hover:brightness-110 active:scale-95 transition-all duration-150 flex items-center gap-2;
+  }
+
+  /* Button ghost */
+  .btn-ghost {
+    @apply bg-bg-3 border border-subtle text-ink-2 text-sm px-4 py-2.5 rounded-xl
+           hover:text-ink hover:border-medium transition-all duration-150 flex items-center gap-2;
+  }
+
+  /* Badge */
+  .badge-high   { @apply text-[10px] font-semibold px-2 py-0.5 rounded-full bg-coral-dim text-coral uppercase tracking-wide; }
+  .badge-medium { @apply text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gold-dim text-gold uppercase tracking-wide; }
+  .badge-low    { @apply text-[10px] font-semibold px-2 py-0.5 rounded-full bg-teal-dim text-teal uppercase tracking-wide; }
+  .badge-done   { @apply text-[10px] font-semibold px-2 py-0.5 rounded-full bg-teal-dim text-teal uppercase tracking-wide; }
+  .badge-pending   { @apply text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[rgba(96,165,250,0.12)] text-blue-400 uppercase tracking-wide; }
+  .badge-inprogress { @apply text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gold-dim text-gold uppercase tracking-wide; }
+
+  /* Progress bar */
+  .prog-bar { @apply h-1 bg-bg-3 rounded-full overflow-hidden; }
+  .prog-fill { @apply h-full rounded-full transition-all duration-700 ease-out; }
+
+  /* Section title */
+  .sec-title { @apply font-sans text-lg font-semibold text-ink; }
+}
+
+/* GSAP will-change optimization */
+.gsap-target { will-change: transform, opacity; }
+
+/* Ambient background glow */
+#root::before {
+  content: '';
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(ellipse 70% 50% at 100% 0%, rgba(232,197,71,0.04) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 60% at 0% 100%, rgba(78,204,163,0.03) 0%, transparent 55%);
+}
