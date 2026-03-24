@@ -3,26 +3,29 @@
 
 /**
  * Calculate discipline score out of 100
- * Habits   → 40%
- * Tasks    → 35%
- * Focus    → 25% (120 min = full score)
+ * Habits  → 40%  (completion %)
+ * Tasks   → 30%  (completion %)
+ * Focus   → 30%  (600 min = 10h = full 30 points)
  */
 export function calcScore({ habits = [], tasks = [], focusMins = 0 }) {
-  const habitDone = habits.filter(h => h.doneToday).length
-  const habitPct  = habits.length > 0 ? (habitDone / habits.length) * 100 : 100
-  const habitScore = habitPct * 0.4
+  // Habits: 40 points
+  const habitDone  = habits.filter(h => h.doneToday).length
+  const habitPct   = habits.length > 0 ? (habitDone / habits.length) : 1
+  const habitScore = habitPct * 40
 
-  const taskDone  = tasks.filter(t => t.status === 'done').length
-  const taskPct   = tasks.length > 0 ? (taskDone / tasks.length) * 100 : 100
-  const taskScore = taskPct * 0.35
+  // Tasks: 30 points
+  const taskDone   = tasks.filter(t => t.status === 'done').length
+  const taskPct    = tasks.length > 0 ? (taskDone / tasks.length) : 1
+  const taskScore  = taskPct * 30
 
-  const focusScore = Math.min((focusMins / 120) * 100, 100) * 0.25
+  // Focus: 30 points — 10 hours (600 min) = full 30
+  const focusScore = Math.min((focusMins / 600) * 30, 30)
 
   return Math.round(habitScore + taskScore + focusScore)
 }
 
 /**
- * Get score color class based on value
+ * Get score color based on value
  */
 export function scoreColor(score) {
   if (score >= 80) return '#4ecca3'   // teal — excellent
@@ -45,16 +48,24 @@ export function getSuggestions({ habits, tasks, focusMins, score }) {
   const suggestions = []
   const hPct = habitPct(habits)
 
-  if (hPct < 70)
-    suggestions.push({ icon: '🌱', text: 'Habit completion is below 70%. Try finishing 2 habits before noon.' })
+  if (habits.length === 0)
+    suggestions.push({ icon: '🌱', text: 'Koi habit add kari nathi. Home tab mathi sharu karo.' })
+  else if (hPct < 70)
+    suggestions.push({ icon: '🌱', text: 'Habit completion 70% thi ochhu che. Benak 2 habits subah ma puri karo.' })
+
   if (focusMins < 60)
-    suggestions.push({ icon: '⏱', text: 'Less than 1 hour of focus today. Even 25 minutes makes a difference.' })
-  if (tasks.filter(t => t.status === 'done').length === 0)
-    suggestions.push({ icon: '✅', text: 'No tasks completed yet. Pick your #1 priority and start now.' })
+    suggestions.push({ icon: '⏱', text: '1 kalaak thi ochho focus time. 25 minutes pan fark padse.' })
+  else if (focusMins < 300)
+    suggestions.push({ icon: '🎯', text: `${Math.round(focusMins/60*10)/10} kalaak focus thayo. 10 kalaak = pura 30 points!` })
+
+  if (tasks.length > 0 && tasks.filter(t => t.status === 'done').length === 0)
+    suggestions.push({ icon: '✅', text: 'Koi task complete nathi thayo. Aaje #1 priority select karo.' })
+
   if (score >= 80)
-    suggestions.push({ icon: '🏆', text: "Excellent score! You're building real discipline. Keep it up!" })
+    suggestions.push({ icon: '🏆', text: 'Excellent score! Sacchi discipline banavo cho. Aage vadho!' })
+
   if (!suggestions.length)
-    suggestions.push({ icon: '✨', text: 'Keep tracking daily. Consistency compounds into results.' })
+    suggestions.push({ icon: '✨', text: 'Roz track karo. Consistency compounds into results.' })
 
   return suggestions
 }

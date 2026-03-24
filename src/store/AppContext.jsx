@@ -1,19 +1,9 @@
 // store/AppContext.jsx
-// Global state management using React Context + useReducer
-
 import { createContext, useContext, useReducer, useEffect, useCallback } from 'react'
 import * as db from '../utils/db'
 import { TODAY, TODAY_KEY } from '../utils/date'
 
 const AppContext = createContext(null)
-
-const DEFAULT_HABITS = [
-  { icon: '🌅', name: 'Wake up early',  streak: 0, doneToday: false, missReasons: [] },
-  { icon: '💪', name: 'Workout',         streak: 0, doneToday: false, missReasons: [] },
-  { icon: '📖', name: 'Reading 30min',   streak: 0, doneToday: false, missReasons: [] },
-  { icon: '📵', name: 'No Instagram',    streak: 0, doneToday: false, missReasons: [] },
-  { icon: '🧘', name: 'Meditation',      streak: 0, doneToday: false, missReasons: [] },
-]
 
 const initialState = {
   habits:    [],
@@ -52,15 +42,7 @@ export function AppProvider({ children }) {
       ])
       let settings = await db.getSetting('main') || initialState.settings
 
-      // Seed default habits if none exist
-      if (habits.length === 0) {
-        for (const h of DEFAULT_HABITS) {
-          const id = await db.put('habits', { ...h, createdAt: Date.now() })
-          habits.push({ ...h, id, createdAt: Date.now() })
-        }
-      }
-
-      // New day reset
+      // New day reset — doneToday & focusMins reset, but streak preserve
       if (settings.lastDate !== TODAY) {
         habits = habits.map(h => ({ ...h, doneToday: false }))
         for (const h of habits) await db.put('habits', h)
@@ -71,6 +53,24 @@ export function AppProvider({ children }) {
       dispatch({ type: 'SET_ALL', payload: { habits, tasks, goals, notes, dailyLogs, settings } })
     }
     load()
+  }, [])
+
+  // ── Save daily log helper ──
+  const _saveDailyLog = useCallback(async (habits, tasks, focusMins) => {
+    const doneH    = habits.filter(h => h.doneToday).length
+    const habitPct = habits.length > 0 ? Math.round((doneH / habits.length) * 100) : 0
+
+    // Same formula as calcScore — Habits 40, Tasks 30, Focus 30
+    const habitScore = habits.length > 0 ? (doneH / habits.length) * 40 : 40
+    const taskDone   = tasks.filter(t => t.status === 'done').length
+    const taskScore  = tasks.length > 0 ? (taskDone / tasks.length) * 30 : 30
+    const focusScore = Math.min((focusMins / 600) * 30, 30)
+    const score      = Math.round(habitScore + taskScore + focusScore)
+
+    const log = { id: TODAY_KEY, date: TODAY_KEY, habitPct, score, tasksDone: taskDone, focusMins }
+    await db.put('dailyLog', log)
+    const logs = await db.getAll('dailyLog')
+    dispatch({ type: 'SET_LOGS', payload: logs })
   }, [])
 
   // ── Actions ──
@@ -86,7 +86,9 @@ export function AppProvider({ children }) {
     })
     for (const h of updated) if (h.id === id) await db.put('habits', h)
     dispatch({ type: 'SET_HABITS', payload: updated })
-  }, [state.habits])
+    // Auto-save daily log
+    await _saveDailyLog(updated, state.tasks, state.settings.focusMins)
+  }, [state.habits, state.tasks, state.settings.focusMins, _saveDailyLog])
 
   const addHabit = useCallback(async ({ name, icon }) => {
     const rec = { name, icon: icon || '✅', streak: 0, doneToday: false, missReasons: [], createdAt: Date.now() }
@@ -127,7 +129,8 @@ export function AppProvider({ children }) {
     const t = updated.find(t => t.id === id)
     if (t) await db.put('tasks', t)
     dispatch({ type: 'SET_TASKS', payload: updated })
-  }, [state.tasks])
+    await _saveDailyLog(state.habits, updated, state.settings.focusMins)
+  }, [state.tasks, state.habits, state.settings.focusMins, _saveDailyLog])
 
   const deleteTask = useCallback(async (id) => {
     await db.remove('tasks', id)
@@ -178,9 +181,10 @@ export function AppProvider({ children }) {
     }
     await db.saveSetting('main', updated)
     dispatch({ type: 'SET_SETTINGS', payload: updated })
-  }, [state.settings])
+    await _saveDailyLog(state.habits, state.tasks, updated.focusMins)
+  }, [state.settings, state.habits, state.tasks, _saveDailyLog])
 
-  // Save daily log
+  // Manual save daily log (external use)
   const saveDailyLog = useCallback(async (dateKey, data) => {
     const log = { id: dateKey, date: dateKey, ...data }
     await db.put('dailyLog', log)
