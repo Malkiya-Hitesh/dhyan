@@ -60,10 +60,10 @@ export function AppProvider({ children }) {
     const doneH    = habits.filter(h => h.doneToday).length
     const habitPct = habits.length > 0 ? Math.round((doneH / habits.length) * 100) : 0
 
-    // Same formula as calcScore — Habits 40, Tasks 30, Focus 30
-    const habitScore = habits.length > 0 ? (doneH / habits.length) * 40 : 40
+    // calcScore thi exact same formula — empty = 0, phantom 70 nahi
+    const habitScore = habits.length > 0 ? (doneH / habits.length) * 40 : 0
     const taskDone   = tasks.filter(t => t.status === 'done').length
-    const taskScore  = tasks.length > 0 ? (taskDone / tasks.length) * 30 : 30
+    const taskScore  = tasks.length > 0 ? (taskDone / tasks.length) * 30 : 0
     const focusScore = Math.min((focusMins / 600) * 30, 30)
     const score      = Math.round(habitScore + taskScore + focusScore)
 

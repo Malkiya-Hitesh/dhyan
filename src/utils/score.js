@@ -8,15 +8,13 @@
  * Focus   → 30%  (600 min = 10h = full 30 points)
  */
 export function calcScore({ habits = [], tasks = [], focusMins = 0 }) {
-  // Habits: 40 points
+  // Habits: 40 points — no habits = 0 (phantom 70 nahi)
   const habitDone  = habits.filter(h => h.doneToday).length
-  const habitPct   = habits.length > 0 ? (habitDone / habits.length) : 1
-  const habitScore = habitPct * 40
+  const habitScore = habits.length > 0 ? (habitDone / habits.length) * 40 : 0
 
-  // Tasks: 30 points
+  // Tasks: 30 points — no tasks = 0
   const taskDone   = tasks.filter(t => t.status === 'done').length
-  const taskPct    = tasks.length > 0 ? (taskDone / tasks.length) : 1
-  const taskScore  = taskPct * 30
+  const taskScore  = tasks.length > 0 ? (taskDone / tasks.length) * 30 : 0
 
   // Focus: 30 points — 10 hours (600 min) = full 30
   const focusScore = Math.min((focusMins / 600) * 30, 30)
@@ -28,9 +26,10 @@ export function calcScore({ habits = [], tasks = [], focusMins = 0 }) {
  * Get score color based on value
  */
 export function scoreColor(score) {
-  if (score >= 80) return '#4ecca3'   // teal — excellent
-  if (score >= 50) return '#e8c547'   // gold  — good
-  return '#ff6b6b'                    // coral — needs work
+  if (score >= 80) return '#4ecca3'  // teal — excellent
+  if (score >= 50) return '#e8c547'  // gold  — good
+  if (score > 0)   return '#ff6b6b'  // coral — needs work
+  return '#3a342a'                   // dim   — no data yet
 }
 
 /**

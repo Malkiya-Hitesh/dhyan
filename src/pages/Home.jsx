@@ -19,21 +19,25 @@ export default function Home({ showToast }) {
   const [missText,   setMissText]   = useState('')
   const [newHabit,   setNewHabit]   = useState({ name: '', icon: '' })
 
-  const score   = calcScore({ habits, tasks, focusMins: settings.focusMins })
-  const hPct    = habitPct(habits)
+  const score    = calcScore({ habits, tasks, focusMins: settings.focusMins })
+  const hPct     = habitPct(habits)
   const greeting = getGreeting()
-  const top3    = tasks.filter(t => t.status !== 'done')
+  const top3     = tasks
+    .filter(t => t.status !== 'done')
     .sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.priority] - { high: 0, medium: 1, low: 2 }[b.priority]))
     .slice(0, 3)
 
-  const pageRef    = usePageTransition()
-  const habitRef   = useStaggerIn([habits.length])
+  const pageRef  = usePageTransition()
+  const habitRef = useStaggerIn([habits.length])
 
+  // BUG FIX: toggle PAHELA doneToday capture karo
   const handleToggle = useCallback(async (id) => {
     const h = habits.find(h => h.id === id)
     if (!h) return
+    const wasDone = h.doneToday  // capture before async toggle
     await toggleHabit(id)
-    if (h.doneToday) { // was done → now undone → ask reason
+    if (wasDone) {
+      // Was done → now undone → ask miss reason
       setPendingId(id)
       setMissModal(true)
     }
@@ -41,14 +45,17 @@ export default function Home({ showToast }) {
 
   const handleSaveMiss = async () => {
     if (pendingId && missText.trim()) await saveMissReason(pendingId, missText.trim())
-    setMissText(''); setPendingId(null); setMissModal(false)
+    setMissText('')
+    setPendingId(null)
+    setMissModal(false)
     showToast('Stay accountable! 💪')
   }
 
   const handleAddHabit = async () => {
     if (!newHabit.name.trim()) return showToast('Habit name required')
     await addHabit(newHabit)
-    setNewHabit({ name: '', icon: '' }); setHabitModal(false)
+    setNewHabit({ name: '', icon: '' })
+    setHabitModal(false)
     showToast('Habit added! 🌱')
   }
 
@@ -87,7 +94,7 @@ export default function Home({ showToast }) {
         </div>
       </div>
 
-      {/* Habits */}
+      {/* Daily Habits */}
       <div className="dhyan-card">
         <div className="flex items-center justify-between mb-3">
           <div>
@@ -96,40 +103,51 @@ export default function Home({ showToast }) {
               {habits.filter(h => h.doneToday).length}/{habits.length} complete · {hPct}%
             </p>
           </div>
-          <button className="btn-icon p-2" onClick={() => setHabitModal(true)}>
+          <button
+            onClick={() => setHabitModal(true)}
+            className="w-8 h-8 rounded-full bg-bg-3 border border-subtle flex items-center justify-center text-ink-2 hover:text-ink hover:border-medium transition-all"
+          >
             <FiPlus size={16} />
           </button>
         </div>
-        {/* Progress */}
+
+        {/* Progress bar */}
         <div className="prog-bar mb-3">
           <div className="prog-fill bg-teal" style={{ width: hPct + '%' }} />
         </div>
-        {/* List */}
+
+        {/* Habit list */}
         <div ref={habitRef}>
-          {habits.map(h => (
-            <div key={h.id} className="flex items-center gap-3 py-2.5 border-b border-subtle last:border-0">
-              <button
-                onClick={() => handleToggle(h.id)}
-                className={`w-5 h-5 rounded-md border shrink-0 flex items-center justify-center transition-all duration-200
-                  ${h.doneToday ? 'bg-teal border-teal' : 'border-ink-3'}`}
-              >
-                {h.doneToday && <span className="text-bg text-[11px] font-bold">✓</span>}
-              </button>
-              <span className="text-base shrink-0">{h.icon}</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-ink">{h.name}</p>
-                <p className="text-[10px] text-ink-2">{h.streak} day streak</p>
-              </div>
-              {h.streak >= 3 && (
-                <span className="flex items-center gap-0.5 text-[10px] text-gold bg-gold-dim px-2 py-0.5 rounded-full">
-                  <BsFire size={10} />{h.streak}
-                </span>
-              )}
-              <button onClick={() => deleteHabit(h.id)} className="text-ink-3 hover:text-coral transition-colors">
-                <FiTrash2 size={13} />
-              </button>
+          {habits.length === 0 ? (
+            <div className="text-center py-6 text-ink-3">
+              <p className="text-xs">Koi habit nathi. + button thi add karo.</p>
             </div>
-          ))}
+          ) : (
+            habits.map(h => (
+              <div key={h.id} className="flex items-center gap-3 py-2.5 border-b border-subtle last:border-0">
+                <button
+                  onClick={() => handleToggle(h.id)}
+                  className={`w-5 h-5 rounded-md border shrink-0 flex items-center justify-center transition-all duration-200
+                    ${h.doneToday ? 'bg-teal border-teal' : 'border-ink-3'}`}
+                >
+                  {h.doneToday && <span className="text-bg text-[11px] font-bold">✓</span>}
+                </button>
+                <span className="text-base shrink-0">{h.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-ink">{h.name}</p>
+                  <p className="text-[10px] text-ink-2">{h.streak} day streak</p>
+                </div>
+                {h.streak >= 3 && (
+                  <span className="flex items-center gap-0.5 text-[10px] text-gold bg-gold-dim px-2 py-0.5 rounded-full">
+                    <BsFire size={10} />{h.streak}
+                  </span>
+                )}
+                <button onClick={() => deleteHabit(h.id)} className="text-ink-3 hover:text-coral transition-colors">
+                  <FiTrash2 size={13} />
+                </button>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
@@ -139,7 +157,9 @@ export default function Home({ showToast }) {
         {top3.length === 0 ? (
           <div className="text-center py-4">
             <HiCheckCircle size={28} className="text-teal mx-auto mb-2 opacity-50" />
-            <p className="text-xs text-ink-3">All tasks done! 🎉</p>
+            <p className="text-xs text-ink-3">
+              {tasks.length === 0 ? 'Tasks tab mathi task add karo.' : 'All tasks done! 🎉'}
+            </p>
           </div>
         ) : (
           top3.map((t, i) => (
@@ -159,36 +179,34 @@ export default function Home({ showToast }) {
       <Modal open={habitModal} onClose={() => setHabitModal(false)} title="Add Habit">
         <div className="space-y-3">
           <div>
-            <label className="form-label text-[10px] text-ink-2 uppercase tracking-wider mb-1 block">Habit Name</label>
+            <label className="text-[10px] text-ink-2 uppercase tracking-wider mb-1 block">Habit Name</label>
             <input className="dhyan-input" placeholder="e.g. Morning workout"
-              value={newHabit.name} onChange={e => setNewHabit(p => ({ ...p, name: e.target.value }))}
+              value={newHabit.name}
+              onChange={e => setNewHabit(p => ({ ...p, name: e.target.value }))}
               onKeyDown={e => e.key === 'Enter' && handleAddHabit()} />
           </div>
           <div>
-            <label className="form-label text-[10px] text-ink-2 uppercase tracking-wider mb-1 block">Icon (emoji)</label>
+            <label className="text-[10px] text-ink-2 uppercase tracking-wider mb-1 block">Icon (emoji)</label>
             <input className="dhyan-input" placeholder="💪" maxLength={2}
-              value={newHabit.icon} onChange={e => setNewHabit(p => ({ ...p, icon: e.target.value }))} />
+              value={newHabit.icon}
+              onChange={e => setNewHabit(p => ({ ...p, icon: e.target.value }))} />
           </div>
-             <div className="sticky top-0 bg-bg-1 z-10 pb-3">
-            <div className="flex gap-2">
-              <button className="btn-gold flex-1" onClick={handleAddHabit}>Add Habit</button>
-              <button className="btn-ghost" onClick={() => setHabitModal(false)}>Cancel</button>
-            </div>
+          <div className="flex gap-2">
+            <button className="btn-gold flex-1" onClick={handleAddHabit}>Add Habit</button>
+            <button className="btn-ghost" onClick={() => setHabitModal(false)}>Cancel</button>
           </div>
         </div>
       </Modal>
 
       {/* Miss Reason Modal */}
-      <Modal open={missModal} onClose={() => setMissModal(false)} title="Why did you miss it?">
+      <Modal open={missModal} onClose={() => { setMissModal(false); setMissText('') }} title="Why did you miss it?">
         <div className="space-y-3">
-          <div className="sticky top-0 bg-bg-1 z-10 pb-3">
-            <div className="flex gap-2">
-              <button className="btn-gold flex-1" onClick={handleSaveMiss}>Save Reason</button>
-              <button className="btn-ghost" onClick={() => { setMissModal(false); setMissText('') }}>Skip</button>
-            </div>
-          </div>
           <textarea className="dhyan-input" rows={3} placeholder="Be honest with yourself..."
             value={missText} onChange={e => setMissText(e.target.value)} />
+          <div className="flex gap-2">
+            <button className="btn-gold flex-1" onClick={handleSaveMiss}>Save Reason</button>
+            <button className="btn-ghost" onClick={() => { setMissModal(false); setMissText('') }}>Skip</button>
+          </div>
         </div>
       </Modal>
     </div>

@@ -62,9 +62,9 @@ function tickFormatter(val, idx) {
   return ''
 }
 
-// Score breakdown — 3 pillars
+// Score breakdown bar — value direct points che (e.g. 27/40)
 function ScoreBar({ label, value, max, color, icon: Icon }) {
-  const pct = Math.min((value / max) * 100, 100)
+  const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0
   return (
     <div className="mb-3 last:mb-0">
       <div className="flex items-center justify-between text-[11px] mb-1.5">
@@ -72,9 +72,7 @@ function ScoreBar({ label, value, max, color, icon: Icon }) {
           <Icon size={12} style={{ color }} />
           {label}
         </span>
-        <span className="font-semibold" style={{ color }}>
-          {Math.round(pct * max / 100 * (max === 40 ? 1 : max === 30 ? 1 : 1) / max * max)}/{max}
-        </span>
+        <span className="font-semibold" style={{ color }}>{value}/{max}</span>
       </div>
       <div className="prog-bar">
         <div className="prog-fill transition-all duration-700"
@@ -93,13 +91,11 @@ export default function Dashboard() {
   const hPct     = habitPct(habits)
   const focusHrs = Math.round((settings.focusMins / 60) * 10) / 10
 
-  // Score breakdown values
-  const habitScore = habits.length > 0
-    ? Math.round((habits.filter(h => h.doneToday).length / habits.length) * 40)
-    : 40
-  const taskScore = tasks.length > 0
-    ? Math.round((tasks.filter(t => t.status === 'done').length / tasks.length) * 30)
-    : 30
+  // Score breakdown — same formula as calcScore (empty = 0, not full)
+  const habitDone  = habits.filter(h => h.doneToday).length
+  const habitScore = habits.length > 0 ? Math.round((habitDone / habits.length) * 40) : 0
+  const taskDone   = tasks.filter(t => t.status === 'done').length
+  const taskScore  = tasks.length > 0 ? Math.round((taskDone / tasks.length) * 30) : 0
   const focusScore = Math.min(Math.round((settings.focusMins / 600) * 30), 30)
 
   // 30-day chart
