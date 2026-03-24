@@ -10,7 +10,7 @@ export function formatDate(dateStr) {
 
 export function isOverdue(deadline) {
   if (!deadline) return false
-  return new Date(deadline) < new Date() 
+  return new Date(deadline) < new Date()
 }
 
 export function getGreeting() {
@@ -29,6 +29,30 @@ export function getLast7Days() {
   })
 }
 
+// Rolling 30-day window
+// Day 1  → [day1]              (1 entry)
+// Day 7  → [day1…day7]         (7 entries)
+// Day 30 → [day1…day30]        (30 entries — window full)
+// Day 31 → [day2…day31]        (day1 drops, 31 adds — always 30)
+export function getLast30Days() {
+  return Array.from({ length: 30 }, (_, i) => {
+    const d = new Date()
+    d.setDate(d.getDate() - (29 - i))
+    return d.toISOString().split('T')[0]
+  })
+}
+
 export function getDayLabel(dateKey) {
   return new Date(dateKey).toLocaleDateString('en', { weekday: 'short' })
+}
+
+// "Jan 5", "Feb 12" — 30-day chart labels mate
+export function getShortDateLabel(dateKey) {
+  return new Date(dateKey).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })
+}
+
+export function getYesterdayKey() {
+  const d = new Date()
+  d.setDate(d.getDate() - 1)
+  return d.toISOString().split('T')[0]
 }

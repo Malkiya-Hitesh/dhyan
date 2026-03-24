@@ -94,7 +94,7 @@ export default function Notes({ showToast }) {
                     <FiTrash2 size={13} />
                   </button>
                 </div>
-                <p className="text-xs text-ink-2 leading-relaxed mb-2 whitespace-pre-wrap wrap-break-word">
+                <p className="text-xs text-ink-2 leading-relaxed mb-2 whitespace-pre-wrap break-words">
                   {n.content}
                 </p>
                 <div className="flex gap-1.5 flex-wrap items-center">
@@ -114,7 +114,6 @@ export default function Notes({ showToast }) {
       {/* Add Note Modal */}
       <Modal open={modal} onClose={() => setModal(false)} title="Add Note">
         <div className="space-y-3">
-          
           <div>
             <label className="text-[10px] text-ink-2 uppercase tracking-wider mb-1 block">Title</label>
             <input className="dhyan-input" placeholder="Note title..."

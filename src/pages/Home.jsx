@@ -158,7 +158,6 @@ export default function Home({ showToast }) {
       {/* Add Habit Modal */}
       <Modal open={habitModal} onClose={() => setHabitModal(false)} title="Add Habit">
         <div className="space-y-3">
-       
           <div>
             <label className="form-label text-[10px] text-ink-2 uppercase tracking-wider mb-1 block">Habit Name</label>
             <input className="dhyan-input" placeholder="e.g. Morning workout"

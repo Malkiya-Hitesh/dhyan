@@ -19,6 +19,7 @@ function AppInner() {
   const { toast, showToast } = useToast()
   const deferredPromptRef = useRef(null)
 
+  // App install and online status
   useEffect(() => {
     const onBeforeInstallPrompt = (e) => {
       e.preventDefault()
@@ -28,7 +29,7 @@ function AppInner() {
 
     const onAppInstalled = () => {
       setInstallReady(false)
-      showToast('Dhyan installed! ✅')
+      showToast('Dhyan installed!')
     }
 
     const onOnline = () => setIsOnline(true)
@@ -47,16 +48,18 @@ function AppInner() {
     }
   }, [showToast])
 
+  // PWA install handler
   const handleInstall = async () => {
     const promptEvent = deferredPromptRef.current
     if (!promptEvent) return
     promptEvent.prompt()
     const { outcome } = await promptEvent.userChoice
-    if (outcome === 'accepted') showToast('App installed! 🎉')
+    if (outcome === 'accepted') showToast('App installed!')
     deferredPromptRef.current = null
     setInstallReady(false)
   }
 
+  // Loading state
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center bg-bg">
@@ -68,13 +71,13 @@ function AppInner() {
     )
   }
 
+  // Page configuration
   const pages = { home: Home, tasks: Tasks, dashboard: Dashboard, goals: Goals, notes: Notes }
   const ActivePage = pages[page] || Home
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-bg text-ink">
       <TopNav isOnline={isOnline} />
-
       {/* PWA install banner */}
       {installReady && (
         <div className="bg-gold-dim border-b border-gold/20 px-4 py-2 flex items-center justify-between">

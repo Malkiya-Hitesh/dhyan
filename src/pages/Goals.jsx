@@ -85,8 +85,7 @@ export default function Goals({ showToast }) {
       )}
 
       <Modal open={modal} onClose={() => setModal(false)} title="Add Goal">
-        <div className="space-y-3 ">
-         
+        <div className="space-y-3">
           <div>
             <label className="text-[10px] text-ink-2 uppercase tracking-wider mb-1 block">Goal Title</label>
             <input className="dhyan-input" placeholder="e.g. Launch my product"

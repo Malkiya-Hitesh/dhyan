@@ -107,7 +107,6 @@ export default function Tasks({ showToast }) {
       {/* Add Task Modal */}
       <Modal open={modal} onClose={() => setModal(false)} title="Add Task">
         <div className="space-y-3">
-          
           <div>
             <label className="text-[10px] text-ink-2 uppercase tracking-wider mb-1 block">Title</label>
             <input className="dhyan-input" placeholder="Task title..."
