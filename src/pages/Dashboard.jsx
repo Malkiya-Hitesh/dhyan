@@ -10,7 +10,7 @@ import { BsFire, BsTrophy, BsGraphUp, BsJournalText, BsCheckAll, BsAlarmFill } f
 import { MdDeleteOutline } from 'react-icons/md'
 import { useApp } from '../store/AppContext'
 import { calcScore, habitPct, getSuggestions } from '../utils/score'
-import { getLast7Days, getLast30Days, getDayLabel, getShortDateLabel } from '../utils/date'
+import { getLast7Days, getLast30Days, getDayLabel, getShortDateLabel, TODAY_KEY } from '../utils/date'
 import { usePageTransition, useStaggerIn } from '../hooks/useGsap'
 import Modal from '../components/ui/Modal'
 
@@ -44,8 +44,6 @@ function buildChartData(dailyLogs) {
 
   const data = last30.map((dateKey) => {
     const log = dailyLogs.find(l => l.date === dateKey)
-    // score field use karo — j actual discipline score che (0-100)
-    // juna logs ma score nahi hoy to habitPct fallback
     const val = log ? (log.score ?? log.habitPct ?? 0) : null
     return {
       dateKey,
@@ -64,7 +62,6 @@ function tickFormatter(val, idx) {
   return ''
 }
 
-// Score breakdown bar — value direct points che (e.g. 27/40)
 function ScoreBar({ label, value, max, color, icon: Icon }) {
   const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0
   return (
@@ -94,7 +91,7 @@ export default function Dashboard({ showToast }) {
   const hPct     = habitPct(habits)
   const focusHrs = Math.round((settings.focusMins / 60) * 10) / 10
 
-  // Score breakdown — same formula as calcScore (empty = 0, not full)
+  // Score breakdown
   const habitDone  = habits.filter(h => h.doneToday).length
   const habitScore = habits.length > 0 ? Math.round((habitDone / habits.length) * 40) : 0
   const taskDone   = tasks.filter(t => t.status === 'done').length
@@ -113,14 +110,26 @@ export default function Dashboard({ showToast }) {
   const bestDay  = sorted[0]
   const worstDay = sorted[sorted.length - 1]
 
-  // 7-day heatmap
-  const last7       = getLast7Days()
-  const days7Labels = ['S','M','T','W','T','F','S']
-  const weekDots    = last7.map((dateKey, i) => {
+  // ── 7-day heatmap — FIXED ──
+  const last7 = getLast7Days()
+
+  const weekDots = last7.map((dateKey) => {
+    // Actual weekday from the date itself — not a fixed array
+    // 'T00:00:00' lagavanu jethithi timezone shift thi wrong day na aave
+    const dayLabel = new Date(dateKey + 'T00:00:00')
+      .toLocaleDateString('en', { weekday: 'short' })
+      .charAt(0)
+
+    // dailyLogs mathi ae date no actual habitPct lo
     const log = dailyLogs.find(l => l.date === dateKey)
     const pct = log ? (log.habitPct || 0) : 0
-    const bg  = pct >= 70 ? 'bg-gold' : pct >= 30 ? 'bg-gold/40' : pct > 0 ? 'bg-gold/15' : 'bg-bg-3'
-    return { label: days7Labels[i], bg, pct }
+
+    const bg = pct >= 70 ? 'bg-gold' : pct >= 30 ? 'bg-gold/40' : pct > 0 ? 'bg-gold/15' : 'bg-bg-3'
+
+    // Aaje highlight
+    const isToday = dateKey === TODAY_KEY
+
+    return { label: dayLabel, bg, pct, isToday }
   })
 
   const suggestions = getSuggestions({ habits, tasks, focusMins: settings.focusMins, score })
@@ -159,7 +168,7 @@ export default function Dashboard({ showToast }) {
         </div>
       </div>
 
-      {/* 7-day heatmap */}
+      {/* 7-day heatmap — FIXED */}
       <div className="dhyan-card">
         <div className="flex items-center gap-2 mb-3">
           <FiTrendingUp size={14} className="text-teal" />
@@ -168,10 +177,18 @@ export default function Dashboard({ showToast }) {
         <div className="grid grid-cols-7 gap-1.5">
           {weekDots.map((d, i) => (
             <div key={i} className="text-center">
-              <p className="text-[9px] text-ink-3 mb-1">{d.label}</p>
-              <div className={`aspect-square rounded-md ${d.bg} transition-all duration-300 relative`}
-                title={`${d.pct}%`} />
-              <p className="text-[8px] text-ink-3 mt-1">{d.pct > 0 ? d.pct + '%' : '—'}</p>
+              <p className={`text-[9px] mb-1 font-medium
+                ${d.isToday ? 'text-gold' : 'text-ink-3'}`}>
+                {d.label}
+              </p>
+              <div
+                className={`aspect-square rounded-md ${d.bg} transition-all duration-300
+                  ${d.isToday ? 'ring-1 ring-gold/60' : ''}`}
+                title={`${d.pct}%`}
+              />
+              <p className="text-[8px] text-ink-3 mt-1">
+                {d.pct > 0 ? d.pct + '%' : '—'}
+              </p>
             </div>
           ))}
         </div>
@@ -189,7 +206,6 @@ export default function Dashboard({ showToast }) {
           </span>
         </div>
 
-        {/* Window fill bar */}
         <div className="prog-bar mb-3">
           <div className="prog-fill bg-gold/40"
             style={{ width: `${(daysTracked / 30) * 100}%` }} />
