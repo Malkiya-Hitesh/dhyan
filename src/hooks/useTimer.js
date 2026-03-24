@@ -1,180 +1,157 @@
 // hooks/useTimer.js
-// Focus timer — tab close, reload, mobile sleep ma pan sahi rehvu joie
-// Logic: timer start thay tyare startedAt (wall clock) localStorage ma store karo
-//        reload/wapas aavo to elapsed = now - startedAt → timeLeft = saved - elapsed
+//
+// SIMPLE WALL-CLOCK LOGIC:
+//   Start karo   → startedAt = Date.now() (ms)  localStorage ma save
+//   Interval     → timeLeft = totalSecs - Math.floor((Date.now() - startedAt) / 1000)
+//   Tab close / mobile sleep / reload → load karo, same formula → correct time
+//   Pause karo   → remaining = current timeLeft, startedAt = null
+//   Resume karo  → startedAt = Date.now() - (totalSecs - remaining) * 1000
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 
 const MODES = {
-  pomodoro: { mins: 25, phase: 'focus',      label: 'Pomodoro' },
-  short:    { mins: 5,  phase: 'break',      label: 'Short Break' },
-  long:     { mins: 15, phase: 'long break', label: 'Long Break' },
-  focus15:  { mins: 15, phase: 'focus',      label: '15 min' },
-  focus30:  { mins: 30, phase: 'focus',      label: '30 min' },
-  focus45:  { mins: 45, phase: 'focus',      label: '45 min' },
-  focus60:  { mins: 60, phase: 'focus',      label: '60 min' },
+  pomodoro: { mins: 25, phase: 'focus',  label: 'Pomodoro' },
+  short:    { mins: 5,  phase: 'break',  label: 'Short Break' },
+  long:     { mins: 15, phase: 'break',  label: 'Long Break' },
+  focus15:  { mins: 15, phase: 'focus',  label: '15 min' },
+  focus30:  { mins: 30, phase: 'focus',  label: '30 min' },
+  focus45:  { mins: 45, phase: 'focus',  label: '45 min' },
+  focus60:  { mins: 60, phase: 'focus',  label: '60 min' },
 }
 
-const STORAGE_KEY = 'dhyan_timer_v2'
+const KEY = 'dhyan_timer_v3'
 
-// localStorage ma save karo
-function saveState(state) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-  } catch {}
+function save(obj) {
+  try { localStorage.setItem(KEY, JSON.stringify(obj)) } catch {}
 }
 
-// localStorage mathi load karo + elapsed time adjust karo
-function loadState() {
+function load() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return null
-    const saved = JSON.parse(raw)
+    const s = JSON.parse(localStorage.getItem(KEY) || 'null')
+    if (!s) return null
 
-    if (saved.running && saved.startedAt) {
-      // Actual wall-clock elapsed seconds
-      const elapsedSec = Math.floor((Date.now() - saved.startedAt) / 1000)
-      const newTimeLeft = Math.max(0, saved.timeLeft - elapsedSec)
+    if (s.running && s.startedAt) {
+      // Wall-clock calculation — simple subtract
+      const elapsed  = Math.floor((Date.now() - s.startedAt) / 1000)
+      const timeLeft = s.totalSecs - elapsed
 
-      // Agar timer expire thayo hoy tab close/reload vachhe
-      if (newTimeLeft === 0) {
-        return {
-          ...saved,
-          timeLeft: 0,
-          running: false,
-          expired: true,   // caller ne khabar padse
-          startedAt: null,
-        }
+      if (timeLeft <= 0) {
+        // Timer expired while app was closed
+        return { ...s, timeLeft: 0, running: false, expired: true, startedAt: null }
       }
-
-      return { ...saved, timeLeft: newTimeLeft }
+      return { ...s, timeLeft }
     }
-
-    return saved
-  } catch {
-    return null
-  }
+    return s
+  } catch { return null }
 }
 
 export function useTimer(onSessionComplete) {
-  const savedRef = useRef(loadState())
-  const saved    = savedRef.current
+  const init = useRef(load())
+  const s    = init.current
 
-  const [mode,     setModeKey] = useState(saved?.mode     || 'pomodoro')
+  const [mode,     setModeKey] = useState(s?.mode  || 'pomodoro')
+  const [phase,    setPhase]   = useState(s?.phase || 'focus')
+  const [running,  setRun]     = useState(s?.running || false)
   const [timeLeft, setLeft]    = useState(
-    saved?.timeLeft ?? MODES[saved?.mode || 'pomodoro'].mins * 60
+    s?.timeLeft ?? MODES[s?.mode || 'pomodoro'].mins * 60
   )
-  const [running,  setRun]     = useState(saved?.running  || false)
-  const [phase,    setPhase]   = useState(saved?.phase    || 'focus')
 
-  const intervalRef     = useRef(null)
-  const onCompleteRef   = useRef(onSessionComplete)
-  onCompleteRef.current = onSessionComplete
+  const timerRef  = useRef(null)
+  const onDoneRef = useRef(onSessionComplete)
+  onDoneRef.current = onSessionComplete
 
-  // Mount pe — agar expire thayel hoy to session complete fire karo
+  // Agar app band hatu tyare expire thayel hoy
   useEffect(() => {
-    if (saved?.expired && saved?.phase === 'focus') {
-      onCompleteRef.current(MODES[saved.mode]?.mins || 25)
+    if (init.current?.expired && init.current?.phase === 'focus') {
+      onDoneRef.current(MODES[init.current.mode]?.mins || 25)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, []) // eslint-disable-line
 
-  // Timer interval — har second timeLeft ghatado
+  // Interval — wall-clock thi calculate kartu rehvu
   useEffect(() => {
-    if (!running) {
-      clearInterval(intervalRef.current)
-      return
-    }
+    clearInterval(timerRef.current)
+    if (!running) return
 
-    intervalRef.current = setInterval(() => {
-      setLeft(prev => {
-        const next = prev - 1
+    // startedAt localStorage mathi lo
+    const startedAt = (() => {
+      try {
+        const s = JSON.parse(localStorage.getItem(KEY) || 'null')
+        return s?.startedAt || Date.now()
+      } catch { return Date.now() }
+    })()
 
-        // localStorage update karo — startedAt recalculate karo
-        // (so mobile sleep pachi bhi accurate rehvu)
-        saveState({
-          mode,
-          timeLeft: next,
-          running: true,
-          phase,
-          startedAt: Date.now() - (MODES[mode].mins * 60 - next) * 1000,
-        })
+    const totalSecs = MODES[mode].mins * 60
 
-        if (next <= 0) {
-          clearInterval(intervalRef.current)
-          setRun(false)
+    timerRef.current = setInterval(() => {
+      // Direct wall-clock subtract — mobile sleep ke reload pachi bhi sahi
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000)
+      const left    = totalSecs - elapsed
 
-          // Focus session complete
-          if (phase === 'focus') {
-            onCompleteRef.current(MODES[mode].mins)
-          }
+      if (left <= 0) {
+        clearInterval(timerRef.current)
+        setLeft(0)
+        setRun(false)
+        save({ mode, phase, totalSecs, timeLeft: 0, running: false, startedAt: null })
 
-          // Pomodoro: auto-switch to break
-          if (mode === 'pomodoro') {
-            setModeKey('short')
-            setPhase('break')
-            const breakTime = MODES.short.mins * 60
-            saveState({ mode: 'short', timeLeft: breakTime, running: false, phase: 'break', startedAt: null })
-            return breakTime
-          }
+        if (phase === 'focus') onDoneRef.current(MODES[mode].mins)
 
-          saveState({ mode, timeLeft: 0, running: false, phase, startedAt: null })
-          return 0
+        // Pomodoro: auto-switch to break
+        if (mode === 'pomodoro') {
+          const breakSecs = MODES.short.mins * 60
+          setModeKey('short')
+          setPhase('break')
+          setLeft(breakSecs)
+          save({ mode: 'short', phase: 'break', totalSecs: breakSecs, timeLeft: breakSecs, running: false, startedAt: null })
         }
+        return
+      }
 
-        return next
-      })
-    }, 1000)
+      setLeft(left)
+    }, 500) // 500ms poll — smoother display, no missed seconds
 
-    return () => clearInterval(intervalRef.current)
-  }, [running, mode, phase])
+    return () => clearInterval(timerRef.current)
+  }, [running, mode, phase]) // eslint-disable-line
 
-  // Mode change (sirf jyare running na hoy)
+  // ── Actions ──
+
   const setMode = useCallback((key) => {
     if (running) return
-    const newTime = MODES[key].mins * 60
+    const totalSecs = MODES[key].mins * 60
     setModeKey(key)
-    setLeft(newTime)
     setPhase(MODES[key].phase)
-    saveState({ mode: key, timeLeft: newTime, running: false, phase: MODES[key].phase, startedAt: null })
+    setLeft(totalSecs)
+    save({ mode: key, phase: MODES[key].phase, totalSecs, timeLeft: totalSecs, running: false, startedAt: null })
   }, [running])
 
-  // Play/Pause toggle
   const toggle = useCallback(() => {
-    setRun(r => {
-      const next = !r
-      saveState({
-        mode,
-        timeLeft,
-        running: next,
-        phase,
-        startedAt: next ? Date.now() : null,
-      })
+    setRun(prev => {
+      const next = !prev
+
+      if (next) {
+        // Start / Resume
+        // startedAt backtrack: jano ke totalSecs - timeLeft seconds pahela start thyel hatu
+        const totalSecs = MODES[mode].mins * 60
+        const startedAt = Date.now() - (totalSecs - timeLeft) * 1000
+        save({ mode, phase, totalSecs, timeLeft, running: true, startedAt })
+      } else {
+        // Pause — startedAt null, remaining time save
+        save({ mode, phase, totalSecs: MODES[mode].mins * 60, timeLeft, running: false, startedAt: null })
+      }
+
       return next
     })
-  }, [mode, timeLeft, phase])
+  }, [mode, phase, timeLeft])
 
-  // Manual reset
   const reset = useCallback(() => {
-    clearInterval(intervalRef.current)
+    clearInterval(timerRef.current)
     setRun(false)
-    const newTime = MODES[mode].mins * 60
-    setLeft(newTime)
-    saveState({ mode, timeLeft: newTime, running: false, phase, startedAt: null })
+    const totalSecs = MODES[mode].mins * 60
+    setLeft(totalSecs)
+    save({ mode, phase, totalSecs, timeLeft: totalSecs, running: false, startedAt: null })
   }, [mode, phase])
 
-  // mm:ss display
-  const display = `${String(Math.floor(timeLeft / 60)).padStart(2, '0')}:${String(timeLeft % 60).padStart(2, '0')}`
-
-  // Arc progress 0 → 1
+  const display  = `${String(Math.floor(timeLeft / 60)).padStart(2, '0')}:${String(timeLeft % 60).padStart(2, '0')}`
   const progress = 1 - timeLeft / (MODES[mode].mins * 60)
 
-  return {
-    mode, setMode,
-    timeLeft, display,
-    running, toggle, reset,
-    phase, progress,
-    modes: MODES,
-    modeData: MODES[mode],
-  }
+  return { mode, setMode, timeLeft, display, running, toggle, reset, phase, progress, modeData: MODES[mode] }
 }

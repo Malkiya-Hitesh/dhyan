@@ -1,6 +1,7 @@
 // utils/date.js
 
 export const TODAY     = new Date().toDateString()
+
 export const TODAY_KEY = new Date().toISOString().split('T')[0]
 
 export function formatDate(dateStr) {
