@@ -192,6 +192,36 @@ export function AppProvider({ children }) {
     dispatch({ type: 'SET_LOGS', payload: logs })
   }, [])
 
+  // Reset all data
+  const resetAllData = useCallback(async () => {
+    const stores = ['habits', 'tasks', 'goals', 'notes', 'dailyLog']
+    const db_instance = await db.getDB()
+
+    // Clear all object stores
+    for (const store of stores) {
+      const allRecords = await db_instance.getAll(store)
+      for (const record of allRecords) {
+        await db_instance.delete(store, record.id)
+      }
+    }
+
+    // Reset settings
+    await db.saveSetting('main', initialState.settings)
+
+    // Reset state
+    dispatch({
+      type: 'SET_ALL',
+      payload: {
+        habits: [],
+        tasks: [],
+        goals: [],
+        notes: [],
+        dailyLogs: [],
+        settings: initialState.settings,
+      },
+    })
+  }, [])
+
   return (
     <AppContext.Provider value={{
       ...state,
@@ -201,6 +231,7 @@ export function AppProvider({ children }) {
       addGoal, toggleMilestone, deleteGoal,
       addNote, deleteNote,
       addFocusSession, saveDailyLog,
+      resetAllData,
     }}>
       {children}
     </AppContext.Provider>

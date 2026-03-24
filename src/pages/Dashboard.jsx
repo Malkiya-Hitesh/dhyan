@@ -1,5 +1,5 @@
 // pages/Dashboard.jsx
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   LineChart, Line, BarChart, Bar,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine,
@@ -7,10 +7,12 @@ import {
 import { FiActivity, FiClock, FiCheckSquare, FiTarget, FiZap, FiTrendingUp } from 'react-icons/fi'
 import { HiSparkles, HiLightningBolt, HiStar, HiFire, HiCheckCircle, HiClipboardCheck } from 'react-icons/hi'
 import { BsFire, BsTrophy, BsGraphUp, BsJournalText, BsCheckAll, BsAlarmFill } from 'react-icons/bs'
+import { MdDeleteOutline } from 'react-icons/md'
 import { useApp } from '../store/AppContext'
 import { calcScore, habitPct, getSuggestions } from '../utils/score'
 import { getLast7Days, getLast30Days, getDayLabel, getShortDateLabel } from '../utils/date'
 import { usePageTransition, useStaggerIn } from '../hooks/useGsap'
+import Modal from '../components/ui/Modal'
 
 const ACHIEVEMENTS = [
   { id: 'first_habit',  Icon: HiSparkles,     name: 'First Habit',   check: ({ habits }) => habits.length >= 1 },
@@ -82,8 +84,9 @@ function ScoreBar({ label, value, max, color, icon: Icon }) {
   )
 }
 
-export default function Dashboard() {
-  const { habits, tasks, goals, notes, dailyLogs, settings } = useApp()
+export default function Dashboard({ showToast }) {
+  const { habits, tasks, goals, notes, dailyLogs, settings, resetAllData } = useApp()
+  const [resetModal, setResetModal] = useState(false)
   const pageRef = usePageTransition()
   const achRef  = useStaggerIn([habits.length])
 
@@ -319,6 +322,54 @@ export default function Dashboard() {
           </div>
         ))}
       </div>
+
+      {/* Reset All Data */}
+      <div className="dhyan-card border-coral/20">
+        <button
+          onClick={() => setResetModal(true)}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-coral/10 hover:bg-coral/20 border border-coral/30 rounded-xl text-coral text-sm font-medium transition-all duration-200"
+        >
+          <MdDeleteOutline size={16} />
+          Reset All Data
+        </button>
+      </div>
+
+      {/* Reset Confirmation Modal */}
+      <Modal open={resetModal} onClose={() => setResetModal(false)} title="⚠️ Reset All Data?">
+        <div className="space-y-4">
+          <div className="bg-coral/10 border border-coral/20 rounded-xl p-3">
+            <p className="text-xs text-coral font-semibold mb-1">Warning:</p>
+            <p className="text-xs text-ink-2 leading-relaxed">
+              This will permanently delete ALL data including:
+            </p>
+            <ul className="text-xs text-ink-2 mt-2 space-y-1">
+              <li>• Habits and streaks</li>
+              <li>• Tasks and goals</li>
+              <li>• Notes and logs</li>
+              <li>• Focus sessions history</li>
+            </ul>
+          </div>
+          <p className="text-xs text-ink-2">This action cannot be undone.</p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setResetModal(false)}
+              className="flex-1 px-3 py-2.5 rounded-lg bg-bg-2 text-ink-2 hover:bg-bg-3 text-sm font-medium transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={async () => {
+                await resetAllData()
+                setResetModal(false)
+                showToast('✅ All data reset')
+              }}
+              className="flex-1 px-3 py-2.5 rounded-lg bg-coral text-white hover:bg-coral/90 text-sm font-medium transition-colors"
+            >
+              Delete All
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
