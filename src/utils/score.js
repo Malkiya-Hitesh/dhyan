@@ -68,3 +68,4 @@ export function getSuggestions({ habits, tasks, focusMins, score }) {
 
   return suggestions
 }
+
