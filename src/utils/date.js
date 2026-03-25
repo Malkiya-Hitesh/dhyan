@@ -1,17 +1,19 @@
 // utils/date.js
 
-export const TODAY     = new Date().toDateString()
-
+// Always use ISO date strings (YYYY-MM-DD) — consistent across all comparisons
 export const TODAY_KEY = new Date().toISOString().split('T')[0]
+
+// Keep TODAY as ISO key for backward compatibility (was toDateString() — now fixed)
+export const TODAY = TODAY_KEY
 
 export function formatDate(dateStr) {
   if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 export function isOverdue(deadline) {
   if (!deadline) return false
-  return new Date(deadline) < new Date()
+  return new Date(deadline + 'T00:00:00') < new Date()
 }
 
 export function getGreeting() {
@@ -31,10 +33,6 @@ export function getLast7Days() {
 }
 
 // Rolling 30-day window
-// Day 1  → [day1]              (1 entry)
-// Day 7  → [day1…day7]         (7 entries)
-// Day 30 → [day1…day30]        (30 entries — window full)
-// Day 31 → [day2…day31]        (day1 drops, 31 adds — always 30)
 export function getLast30Days() {
   return Array.from({ length: 30 }, (_, i) => {
     const d = new Date()
@@ -44,12 +42,12 @@ export function getLast30Days() {
 }
 
 export function getDayLabel(dateKey) {
-  return new Date(dateKey).toLocaleDateString('en', { weekday: 'short' })
+  // Append T00:00:00 to avoid timezone shift causing wrong day
+  return new Date(dateKey + 'T00:00:00').toLocaleDateString('en', { weekday: 'short' })
 }
 
-// "Jan 5", "Feb 12" — 30-day chart labels mate
 export function getShortDateLabel(dateKey) {
-  return new Date(dateKey).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })
+  return new Date(dateKey + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })
 }
 
 export function getYesterdayKey() {

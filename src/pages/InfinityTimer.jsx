@@ -44,7 +44,6 @@ async function getAllDatesWithSessions() {
   return dates
 }
 
-// Date → totalSecs map for heatmap intensity
 async function getDateSecsMap() {
   const db = await getInfDB()
   const all = await db.getAll('sessions')
@@ -55,7 +54,7 @@ async function getDateSecsMap() {
   return map
 }
 
-// ── localStorage persistence (useTimer jevu) ────────────────────────
+// ── localStorage persistence ────────────────────────────────────────
 const TIMER_KEY = 'dhyan_infinity_timer_v1'
 
 function saveTimerState(obj) {
@@ -68,10 +67,11 @@ function loadTimerState() {
     if (!s) return null
 
     if (s.running && s.startTs) {
-      // Wall-clock: app band hata tyare bhi elapsed sahi rahese
+      // Wall-clock: calculate correct elapsed even after app was closed
       const elapsed = Math.floor((Date.now() - s.startTs) / 1000)
       return { ...s, elapsed }
     }
+    // Not running — return paused elapsed as-is
     return s
   } catch { return null }
 }
@@ -107,11 +107,11 @@ function toDateKey(date = new Date()) {
 }
 
 function toDisplayDate(dateKey) {
-  const d = new Date(dateKey + 'T00:00:00')
-  const today = toDateKey()
+  const today     = toDateKey()
   const yesterday = toDateKey(new Date(Date.now() - 86400000))
   if (dateKey === today) return 'Today'
   if (dateKey === yesterday) return 'Yesterday'
+  const d = new Date(dateKey + 'T00:00:00')
   return d.toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
@@ -129,20 +129,18 @@ export default function InfinityTimer({ showToast }) {
   const savedTimer = useRef(loadTimerState())
   const sv = savedTimer.current
 
-  // Timer state
-  const [running, setRunning]       = useState(sv?.running || false)
-  const [elapsed, setElapsed]       = useState(sv?.elapsed || 0)
-  const [startTs, setStartTs]       = useState(sv?.startTs || null)
-  const [activity, setActivity]     = useState(sv?.activity || '')
+  const [running, setRunning]         = useState(sv?.running || false)
+  const [elapsed, setElapsed]         = useState(sv?.elapsed || 0)
+  const [startTs, setStartTs]         = useState(sv?.startTs || null)
+  const [activity, setActivity]       = useState(sv?.activity || '')
   const [showSuggest, setShowSuggest] = useState(false)
 
-  // History state
-  const [histTab, setHistTab]         = useState('today')
-  const [sessions, setSessions]       = useState([])
-  const [allDates, setAllDates]       = useState([])
-  const [dateSecsMap, setDateSecsMap] = useState({})
-  const [browseDate, setBrowseDate]   = useState(toDateKey())
-  const [loading, setLoading]         = useState(false)
+  const [histTab, setHistTab]           = useState('today')
+  const [sessions, setSessions]         = useState([])
+  const [allDates, setAllDates]         = useState([])
+  const [dateSecsMap, setDateSecsMap]   = useState({})
+  const [browseDate, setBrowseDate]     = useState(toDateKey())
+  const [loading, setLoading]           = useState(false)
 
   const intervalRef = useRef(null)
   const histRef     = useStaggerIn([sessions.length])
@@ -153,7 +151,7 @@ export default function InfinityTimer({ showToast }) {
     try {
       const data = await getSessionsByDate(dateKey)
       setSessions(data.sort((a, b) => b.startTs - a.startTs))
-    } catch (e) {
+    } catch {
       setSessions([])
     }
     setLoading(false)
@@ -184,7 +182,6 @@ export default function InfinityTimer({ showToast }) {
     intervalRef.current = setInterval(() => {
       const newElapsed = Math.floor((Date.now() - startTs) / 1000)
       setElapsed(newElapsed)
-      // localStorage update karo — mobile sleep/tab switch pachi bhi sahi
       saveTimerState({ running: true, startTs, activity, elapsed: newElapsed })
     }, 500)
 
@@ -199,7 +196,6 @@ export default function InfinityTimer({ showToast }) {
     setElapsed(0)
     setRunning(true)
     setShowSuggest(false)
-    // localStorage ma save — mobile band thay to bhi yaad rahe
     saveTimerState({ running: true, startTs: ts, activity: activity.trim(), elapsed: 0 })
   }
 
@@ -208,9 +204,9 @@ export default function InfinityTimer({ showToast }) {
     clearInterval(intervalRef.current)
     setRunning(false)
     const endTs = Date.now()
+    // Use wall-clock for accurate duration — not the potentially stale `elapsed` state
     const durationSecs = Math.floor((endTs - startTs) / 1000)
 
-    // localStorage clear
     clearTimerState()
 
     if (durationSecs < 5) {
@@ -219,6 +215,7 @@ export default function InfinityTimer({ showToast }) {
       setStartTs(null)
       return
     }
+
     const session = {
       activity: activity.trim(),
       startTs,
@@ -226,11 +223,16 @@ export default function InfinityTimer({ showToast }) {
       durationSecs,
       dateKey: toDateKey(new Date(startTs)),
     }
+
     await saveSession(session)
     await loadSessions(toDateKey())
-    await loadAllDates()   // also refreshes dateSecsMap
-    await syncFocusMins()  // dashboard + score update: infinity mins ÷ 2
-    showToast(`✅ ${activity} — ${fmtDuration(durationSecs)} saved`)
+    await loadAllDates()
+    await syncFocusMins()
+
+    const mins = Math.floor(durationSecs / 60)
+    const secs = durationSecs % 60
+    showToast(`✅ ${activity} — ${mins > 0 ? mins + 'm ' : ''}${secs}s saved`)
+
     setElapsed(0)
     setStartTs(null)
     setActivity('')
@@ -242,7 +244,7 @@ export default function InfinityTimer({ showToast }) {
     const key = histTab === 'browse' ? browseDate : toDateKey()
     await loadSessions(key)
     await loadAllDates()
-    await syncFocusMins()  // recalculate after delete too
+    await syncFocusMins()
     showToast('Session deleted')
   }
 
@@ -265,12 +267,7 @@ export default function InfinityTimer({ showToast }) {
 
   const activeDate = histTab === 'browse' ? browseDate : toDateKey()
 
-  // ── Heatmap intensity — GitHub style 4 levels ────────────────────
-  // Level 0 = no data (bg-bg-3)
-  // Level 1 = 1–29 min  (faint gold)
-  // Level 2 = 30–89 min (medium gold)
-  // Level 3 = 90–179 min (bright gold)
-  // Level 4 = 180+ min  (full gold + glow)
+  // ── Heatmap intensity ────────────────────────────────────────────
   function intensityClass(secs) {
     if (!secs || secs === 0) return { bg: '#1a1a28', opacity: 1 }
     const mins = secs / 60
@@ -280,9 +277,7 @@ export default function InfinityTimer({ showToast }) {
     return { bg: '#e8c547', opacity: 1 }
   }
 
-  // ── Year heatmap — FIXED ─────────────────────────────────────────
-  // 52 weeks × 7 days grid, Sunday = column start
-  // Each cell = 1 day, left-to-right = oldest to newest
+  // ── Year heatmap ─────────────────────────────────────────────────
   const buildYearGrid = () => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -314,7 +309,6 @@ export default function InfinityTimer({ showToast }) {
 
       {/* Timer card */}
       <div className="dhyan-card">
-        {/* Elapsed display */}
         <div className="text-center mb-5">
           <div className={`font-sans font-bold transition-all duration-300
             ${elapsed >= 3600 ? 'text-5xl' : 'text-6xl'}
@@ -342,7 +336,6 @@ export default function InfinityTimer({ showToast }) {
               onFocus={() => setShowSuggest(true)}
               onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
             />
-            {/* Suggestions dropdown */}
             {showSuggest && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-bg-2 border border-subtle rounded-xl overflow-hidden z-50 shadow-lg">
                 {ACTIVITY_SUGGESTIONS.filter(s =>
@@ -362,8 +355,7 @@ export default function InfinityTimer({ showToast }) {
         {/* Controls */}
         <div className="flex justify-center gap-3">
           {!running ? (
-            <button onClick={handleStart}
-              className="btn-gold px-8">
+            <button onClick={handleStart} className="btn-gold px-8">
               <FiPlay size={15} /> Start
             </button>
           ) : (
@@ -374,11 +366,21 @@ export default function InfinityTimer({ showToast }) {
             </button>
           )}
         </div>
+
+        {/* Live focus credit indicator */}
+        {running && elapsed > 0 && (
+          <div className="mt-4 bg-gold-dim border border-gold/20 rounded-xl p-3 text-center">
+            <p className="text-[10px] text-ink-2 uppercase tracking-widest mb-1">Focus Credit</p>
+            <p className="font-sans font-bold text-gold text-lg">
+              +{Math.floor(elapsed / 60)}m {elapsed % 60}s
+            </p>
+            <p className="text-[10px] text-ink-3 mt-0.5">will be added to your score on save</p>
+          </div>
+        )}
       </div>
 
       {/* History section */}
       <div className="dhyan-card">
-        {/* Tab bar */}
         <div className="flex gap-2 mb-4">
           {[
             { key: 'today', label: "Today's Log" },
@@ -416,7 +418,6 @@ export default function InfinityTimer({ showToast }) {
           </div>
         )}
 
-        {/* Date picker for browse */}
         {histTab === 'browse' && (
           <div className="mb-4">
             <label className="text-[10px] text-ink-2 uppercase tracking-wider mb-1.5 block">
@@ -430,7 +431,7 @@ export default function InfinityTimer({ showToast }) {
               onChange={e => {
                 setBrowseDate(e.target.value)
                 if (!allDates.includes(e.target.value)) {
-                  setAllDates(prev => [...new Set([e.target.value, ...prev])].sort((a,b) => b.localeCompare(a)))
+                  setAllDates(prev => [...new Set([e.target.value, ...prev])].sort((a, b) => b.localeCompare(a)))
                 }
               }}
             />
@@ -517,7 +518,7 @@ export default function InfinityTimer({ showToast }) {
         )}
       </div>
 
-      {/* Year at a glance — GitHub style intensity heatmap */}
+      {/* Year at a glance */}
       {allDates.length > 0 && (
         <div className="dhyan-card overflow-x-auto">
           <div className="flex items-center justify-between mb-3">
@@ -527,7 +528,6 @@ export default function InfinityTimer({ showToast }) {
             <p className="text-[10px] text-ink-3">{allDates.length} days</p>
           </div>
 
-          {/* 52 columns (weeks) × 7 rows (days) */}
           <div className="flex gap-[3px]">
             {Array.from({ length: 52 }, (_, weekIdx) => (
               <div key={weekIdx} className="flex flex-col gap-[3px]">
@@ -536,23 +536,15 @@ export default function InfinityTimer({ showToast }) {
                   const cell = yearCells[cellIdx]
                   if (!cell) return <div key={dayIdx} style={{ width: 10, height: 10 }} />
                   const { bg, opacity } = intensityClass(cell.secs)
-                  const mins = Math.round(cell.secs / 60)
-                  const tip = cell.secs > 0
-                    ? `${cell.key}: ${fmtDuration(cell.secs)}`
-                    : cell.key
                   return (
                     <div
                       key={dayIdx}
                       onClick={() => { setBrowseDate(cell.key); setHistTab('browse') }}
-                      title={tip}
+                      title={cell.secs > 0 ? `${cell.key}: ${fmtDuration(cell.secs)}` : cell.key}
                       style={{
-                        width: 10,
-                        height: 10,
-                        borderRadius: 2,
-                        backgroundColor: bg,
-                        opacity,
-                        cursor: 'pointer',
-                        transition: 'opacity 0.15s',
+                        width: 10, height: 10, borderRadius: 2,
+                        backgroundColor: bg, opacity,
+                        cursor: 'pointer', transition: 'opacity 0.15s',
                       }}
                     />
                   )
@@ -561,7 +553,6 @@ export default function InfinityTimer({ showToast }) {
             ))}
           </div>
 
-          {/* Legend */}
           <div className="flex items-center gap-2 mt-3">
             <span className="text-[9px] text-ink-3">Less</span>
             {[0, 0.2, 0.45, 0.72, 1].map((op, i) => (
