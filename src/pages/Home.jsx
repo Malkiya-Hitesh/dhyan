@@ -8,7 +8,6 @@ import { calcScore, habitPct } from '../utils/score'
 import { getGreeting } from '../utils/date'
 import ScoreRing from '../components/ui/ScoreRing'
 import Modal from '../components/ui/Modal'
-import FocusTimer from '../components/FocusTimer'
 import { useStaggerIn, usePageTransition } from '../hooks/useGsap'
 
 export default function Home({ showToast }) {
@@ -30,14 +29,12 @@ export default function Home({ showToast }) {
   const pageRef  = usePageTransition()
   const habitRef = useStaggerIn([habits.length])
 
-  // BUG FIX: toggle PAHELA doneToday capture karo
   const handleToggle = useCallback(async (id) => {
     const h = habits.find(h => h.id === id)
     if (!h) return
-    const wasDone = h.doneToday  // capture before async toggle
+    const wasDone = h.doneToday
     await toggleHabit(id)
     if (wasDone) {
-      // Was done → now undone → ask miss reason
       setPendingId(id)
       setMissModal(true)
     }
@@ -171,9 +168,6 @@ export default function Home({ showToast }) {
           ))
         )}
       </div>
-
-      {/* Focus Timer */}
-      <FocusTimer showToast={showToast} />
 
       {/* Add Habit Modal */}
       <Modal open={habitModal} onClose={() => setHabitModal(false)} title="Add Habit">

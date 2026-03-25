@@ -1,5 +1,6 @@
 // store/AppContext.jsx
 import { createContext, useContext, useReducer, useEffect, useCallback } from 'react'
+import { openDB } from 'idb'
 import * as db from '../utils/db'
 import { TODAY, TODAY_KEY } from '../utils/date'
 
@@ -30,6 +31,35 @@ function reducer(state, action) {
   }
 }
 
+// ── Infinity DB helpers (same DB as InfinityTimer.jsx) ───────────────
+const INF_DB      = 'DhyanInfinityDB'
+const INF_VERSION = 1
+
+async function getInfDB() {
+  return openDB(INF_DB, INF_VERSION, {
+    upgrade(db) {
+      if (!db.objectStoreNames.contains('sessions')) {
+        const store = db.createObjectStore('sessions', { keyPath: 'id', autoIncrement: true })
+        store.createIndex('dateKey', 'dateKey', { unique: false })
+      }
+    },
+  })
+}
+
+// Returns today's total seconds from infinity sessions ÷ 2 → focusMins
+async function calcTodayFocusMins() {
+  try {
+    const idb   = await getInfDB()
+    const today = new Date().toISOString().split('T')[0]
+    const rows  = await idb.getAllFromIndex('sessions', 'dateKey', today)
+    const totalSecs = rows.reduce((s, r) => s + (r.durationSecs || 0), 0)
+    return Math.round(totalSecs / 60 / 2)   // half of actual time = focus credit
+  } catch {
+    return 0
+  }
+}
+
+// ── Provider ─────────────────────────────────────────────────────────
 export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState)
 
@@ -42,12 +72,23 @@ export function AppProvider({ children }) {
       ])
       let settings = await db.getSetting('main') || initialState.settings
 
-      // New day reset — doneToday & focusMins reset, but streak preserve
+      // Compute focusMins fresh from infinity sessions on every load
+      const liveFocusMins = await calcTodayFocusMins()
+
+      // New day reset
       if (settings.lastDate !== TODAY) {
         habits = habits.map(h => ({ ...h, doneToday: false }))
         for (const h of habits) await db.put('habits', h)
-        settings = { ...settings, focusSessions: 0, focusMins: 0, lastDate: TODAY }
+        settings = {
+          ...settings,
+          focusSessions: 0,
+          focusMins: liveFocusMins,
+          lastDate: TODAY,
+        }
         await db.saveSetting('main', settings)
+      } else {
+        // Same day — override stored focusMins with live calculation
+        settings = { ...settings, focusMins: liveFocusMins }
       }
 
       dispatch({ type: 'SET_ALL', payload: { habits, tasks, goals, notes, dailyLogs, settings } })
@@ -60,7 +101,6 @@ export function AppProvider({ children }) {
     const doneH    = habits.filter(h => h.doneToday).length
     const habitPct = habits.length > 0 ? Math.round((doneH / habits.length) * 100) : 0
 
-    // calcScore thi exact same formula — empty = 0, phantom 70 nahi
     const habitScore = habits.length > 0 ? (doneH / habits.length) * 40 : 0
     const taskDone   = tasks.filter(t => t.status === 'done').length
     const taskScore  = tasks.length > 0 ? (taskDone / tasks.length) * 30 : 0
@@ -86,7 +126,6 @@ export function AppProvider({ children }) {
     })
     for (const h of updated) if (h.id === id) await db.put('habits', h)
     dispatch({ type: 'SET_HABITS', payload: updated })
-    // Auto-save daily log
     await _saveDailyLog(updated, state.tasks, state.settings.focusMins)
   }, [state.habits, state.tasks, state.settings.focusMins, _saveDailyLog])
 
@@ -172,19 +211,22 @@ export function AppProvider({ children }) {
     dispatch({ type: 'SET_NOTES', payload: state.notes.filter(n => n.id !== id) })
   }, [state.notes])
 
-  // Focus timer session complete
-  const addFocusSession = useCallback(async (mins) => {
-    const updated = {
-      ...state.settings,
-      focusSessions: (state.settings.focusSessions || 0) + 1,
-      focusMins:     (state.settings.focusMins || 0) + mins,
-    }
+  // ── syncFocusMins — InfinityTimer session save thay tyare call karvo ──
+  // Infinity sessions total ÷ 2 = focus credit (minutes)
+  const syncFocusMins = useCallback(async () => {
+    const focusMins = await calcTodayFocusMins()
+    const updated   = { ...state.settings, focusMins }
     await db.saveSetting('main', updated)
     dispatch({ type: 'SET_SETTINGS', payload: updated })
-    await _saveDailyLog(state.habits, state.tasks, updated.focusMins)
+    await _saveDailyLog(state.habits, state.tasks, focusMins)
   }, [state.settings, state.habits, state.tasks, _saveDailyLog])
 
-  // Manual save daily log (external use)
+  // Legacy — kept for any leftover references, but no-op now
+  const addFocusSession = useCallback(async () => {
+    await syncFocusMins()
+  }, [syncFocusMins])
+
+  // Manual save daily log
   const saveDailyLog = useCallback(async (dateKey, data) => {
     const log = { id: dateKey, date: dateKey, ...data }
     await db.put('dailyLog', log)
@@ -196,19 +238,13 @@ export function AppProvider({ children }) {
   const resetAllData = useCallback(async () => {
     const stores = ['habits', 'tasks', 'goals', 'notes', 'dailyLog']
     const db_instance = await db.getDB()
-
-    // Clear all object stores
     for (const store of stores) {
       const allRecords = await db_instance.getAll(store)
       for (const record of allRecords) {
         await db_instance.delete(store, record.id)
       }
     }
-
-    // Reset settings
     await db.saveSetting('main', initialState.settings)
-
-    // Reset state
     dispatch({
       type: 'SET_ALL',
       payload: {
@@ -230,7 +266,9 @@ export function AppProvider({ children }) {
       addTask, cycleTaskStatus, deleteTask,
       addGoal, toggleMilestone, deleteGoal,
       addNote, deleteNote,
-      addFocusSession, saveDailyLog,
+      addFocusSession,   // legacy no-op wrapper
+      syncFocusMins,     // call this after every infinity session save/delete
+      saveDailyLog,
       resetAllData,
     }}>
       {children}

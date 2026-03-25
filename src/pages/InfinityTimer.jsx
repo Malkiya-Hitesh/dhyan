@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { FiPlay, FiSquare, FiClock, FiCalendar, FiTrash2, FiChevronLeft, FiChevronRight } from 'react-icons/fi'
 import { BsInfinity } from 'react-icons/bs'
 import { usePageTransition, useStaggerIn } from '../hooks/useGsap'
+import { useApp } from '../store/AppContext'
 import { openDB } from 'idb'
 
 // ── IndexedDB helpers ────────────────────────────────────────────────
@@ -41,6 +42,42 @@ async function getAllDatesWithSessions() {
   const all = await db.getAll('sessions')
   const dates = [...new Set(all.map(s => s.dateKey))].sort((a, b) => b.localeCompare(a))
   return dates
+}
+
+// Date → totalSecs map for heatmap intensity
+async function getDateSecsMap() {
+  const db = await getInfDB()
+  const all = await db.getAll('sessions')
+  const map = {}
+  for (const s of all) {
+    map[s.dateKey] = (map[s.dateKey] || 0) + (s.durationSecs || 0)
+  }
+  return map
+}
+
+// ── localStorage persistence (useTimer jevu) ────────────────────────
+const TIMER_KEY = 'dhyan_infinity_timer_v1'
+
+function saveTimerState(obj) {
+  try { localStorage.setItem(TIMER_KEY, JSON.stringify(obj)) } catch {}
+}
+
+function loadTimerState() {
+  try {
+    const s = JSON.parse(localStorage.getItem(TIMER_KEY) || 'null')
+    if (!s) return null
+
+    if (s.running && s.startTs) {
+      // Wall-clock: app band hata tyare bhi elapsed sahi rahese
+      const elapsed = Math.floor((Date.now() - s.startTs) / 1000)
+      return { ...s, elapsed }
+    }
+    return s
+  } catch { return null }
+}
+
+function clearTimerState() {
+  try { localStorage.removeItem(TIMER_KEY) } catch {}
 }
 
 // ── Formatting ───────────────────────────────────────────────────────
@@ -86,20 +123,26 @@ const ACTIVITY_SUGGESTIONS = [
 // ── Main Component ───────────────────────────────────────────────────
 export default function InfinityTimer({ showToast }) {
   const pageRef = usePageTransition()
+  const { syncFocusMins } = useApp()
+
+  // ── Restore timer state from localStorage on mount ──
+  const savedTimer = useRef(loadTimerState())
+  const sv = savedTimer.current
 
   // Timer state
-  const [running, setRunning]       = useState(false)
-  const [elapsed, setElapsed]       = useState(0)
-  const [startTs, setStartTs]       = useState(null)
-  const [activity, setActivity]     = useState('')
+  const [running, setRunning]       = useState(sv?.running || false)
+  const [elapsed, setElapsed]       = useState(sv?.elapsed || 0)
+  const [startTs, setStartTs]       = useState(sv?.startTs || null)
+  const [activity, setActivity]     = useState(sv?.activity || '')
   const [showSuggest, setShowSuggest] = useState(false)
 
   // History state
-  const [histTab, setHistTab]       = useState('today')  // 'today' | 'browse'
-  const [sessions, setSessions]     = useState([])
-  const [allDates, setAllDates]     = useState([])
-  const [browseDate, setBrowseDate] = useState(toDateKey())
-  const [loading, setLoading]       = useState(false)
+  const [histTab, setHistTab]         = useState('today')
+  const [sessions, setSessions]       = useState([])
+  const [allDates, setAllDates]       = useState([])
+  const [dateSecsMap, setDateSecsMap] = useState({})
+  const [browseDate, setBrowseDate]   = useState(toDateKey())
+  const [loading, setLoading]         = useState(false)
 
   const intervalRef = useRef(null)
   const histRef     = useStaggerIn([sessions.length])
@@ -119,6 +162,8 @@ export default function InfinityTimer({ showToast }) {
   const loadAllDates = useCallback(async () => {
     const dates = await getAllDatesWithSessions()
     setAllDates(dates)
+    const map = await getDateSecsMap()
+    setDateSecsMap(map)
   }, [])
 
   useEffect(() => {
@@ -131,15 +176,20 @@ export default function InfinityTimer({ showToast }) {
     loadSessions(key)
   }, [browseDate, histTab, loadSessions])
 
-  // ── Timer tick — wall-clock ──────────────────────────────────────
+  // ── Timer tick — wall-clock based ────────────────────────────────
   useEffect(() => {
     clearInterval(intervalRef.current)
     if (!running || !startTs) return
+
     intervalRef.current = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startTs) / 1000))
+      const newElapsed = Math.floor((Date.now() - startTs) / 1000)
+      setElapsed(newElapsed)
+      // localStorage update karo — mobile sleep/tab switch pachi bhi sahi
+      saveTimerState({ running: true, startTs, activity, elapsed: newElapsed })
     }, 500)
+
     return () => clearInterval(intervalRef.current)
-  }, [running, startTs])
+  }, [running, startTs, activity])
 
   // ── Start ───────────────────────────────────────────────────────
   const handleStart = () => {
@@ -149,6 +199,8 @@ export default function InfinityTimer({ showToast }) {
     setElapsed(0)
     setRunning(true)
     setShowSuggest(false)
+    // localStorage ma save — mobile band thay to bhi yaad rahe
+    saveTimerState({ running: true, startTs: ts, activity: activity.trim(), elapsed: 0 })
   }
 
   // ── Stop & Save ─────────────────────────────────────────────────
@@ -157,6 +209,10 @@ export default function InfinityTimer({ showToast }) {
     setRunning(false)
     const endTs = Date.now()
     const durationSecs = Math.floor((endTs - startTs) / 1000)
+
+    // localStorage clear
+    clearTimerState()
+
     if (durationSecs < 5) {
       showToast('5 second thi ochhu — save nahi thayo')
       setElapsed(0)
@@ -172,7 +228,8 @@ export default function InfinityTimer({ showToast }) {
     }
     await saveSession(session)
     await loadSessions(toDateKey())
-    await loadAllDates()
+    await loadAllDates()   // also refreshes dateSecsMap
+    await syncFocusMins()  // dashboard + score update: infinity mins ÷ 2
     showToast(`✅ ${activity} — ${fmtDuration(durationSecs)} saved`)
     setElapsed(0)
     setStartTs(null)
@@ -185,6 +242,7 @@ export default function InfinityTimer({ showToast }) {
     const key = histTab === 'browse' ? browseDate : toDateKey()
     await loadSessions(key)
     await loadAllDates()
+    await syncFocusMins()  // recalculate after delete too
     showToast('Session deleted')
   }
 
@@ -206,6 +264,41 @@ export default function InfinityTimer({ showToast }) {
   }
 
   const activeDate = histTab === 'browse' ? browseDate : toDateKey()
+
+  // ── Heatmap intensity — GitHub style 4 levels ────────────────────
+  // Level 0 = no data (bg-bg-3)
+  // Level 1 = 1–29 min  (faint gold)
+  // Level 2 = 30–89 min (medium gold)
+  // Level 3 = 90–179 min (bright gold)
+  // Level 4 = 180+ min  (full gold + glow)
+  function intensityClass(secs) {
+    if (!secs || secs === 0) return { bg: '#1a1a28', opacity: 1 }
+    const mins = secs / 60
+    if (mins < 30)  return { bg: '#e8c547', opacity: 0.2 }
+    if (mins < 90)  return { bg: '#e8c547', opacity: 0.45 }
+    if (mins < 180) return { bg: '#e8c547', opacity: 0.72 }
+    return { bg: '#e8c547', opacity: 1 }
+  }
+
+  // ── Year heatmap — FIXED ─────────────────────────────────────────
+  // 52 weeks × 7 days grid, Sunday = column start
+  // Each cell = 1 day, left-to-right = oldest to newest
+  const buildYearGrid = () => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const gridStart = new Date(today)
+    gridStart.setDate(gridStart.getDate() - 363)
+    const cells = []
+    for (let i = 0; i < 364; i++) {
+      const d = new Date(gridStart)
+      d.setDate(d.getDate() + i)
+      const key = toDateKey(d)
+      cells.push({ key, secs: dateSecsMap[key] || 0 })
+    }
+    return cells
+  }
+
+  const yearCells = buildYearGrid()
 
   return (
     <div ref={pageRef} className="p-4 pb-28 w-full max-w-lg mx-auto space-y-4">
@@ -424,29 +517,63 @@ export default function InfinityTimer({ showToast }) {
         )}
       </div>
 
-      {/* Year at a glance */}
+      {/* Year at a glance — GitHub style intensity heatmap */}
       {allDates.length > 0 && (
-        <div className="dhyan-card">
-          <p className="text-[10px] text-ink-2 uppercase tracking-widest mb-3">Days Tracked (Last Year)</p>
-          <div className="flex items-center gap-1 flex-wrap">
-            {Array.from({ length: 52 }, (_, weekIdx) => {
-              const weekStart = new Date(Date.now() - (51 - weekIdx) * 7 * 86400000)
-              return Array.from({ length: 7 }, (_, dayIdx) => {
-                const d = new Date(weekStart)
-                d.setDate(d.getDate() + dayIdx - d.getDay())
-                const key = toDateKey(d)
-                const hasData = allDates.includes(key)
-                return (
-                  <div key={key}
-                    onClick={() => { setBrowseDate(key); setHistTab('browse') }}
-                    title={key}
-                    className={`w-2 h-2 rounded-sm cursor-pointer transition-colors
-                      ${hasData ? 'bg-gold hover:bg-gold/80' : 'bg-bg-3 hover:bg-bg-2'}`} />
-                )
-              })
-            })}
+        <div className="dhyan-card overflow-x-auto">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[10px] text-ink-2 uppercase tracking-widest">
+              Days Tracked (Last Year)
+            </p>
+            <p className="text-[10px] text-ink-3">{allDates.length} days</p>
           </div>
-          <p className="text-[10px] text-ink-3 mt-2">{allDates.length} days with activity</p>
+
+          {/* 52 columns (weeks) × 7 rows (days) */}
+          <div className="flex gap-[3px]">
+            {Array.from({ length: 52 }, (_, weekIdx) => (
+              <div key={weekIdx} className="flex flex-col gap-[3px]">
+                {Array.from({ length: 7 }, (_, dayIdx) => {
+                  const cellIdx = weekIdx * 7 + dayIdx
+                  const cell = yearCells[cellIdx]
+                  if (!cell) return <div key={dayIdx} style={{ width: 10, height: 10 }} />
+                  const { bg, opacity } = intensityClass(cell.secs)
+                  const mins = Math.round(cell.secs / 60)
+                  const tip = cell.secs > 0
+                    ? `${cell.key}: ${fmtDuration(cell.secs)}`
+                    : cell.key
+                  return (
+                    <div
+                      key={dayIdx}
+                      onClick={() => { setBrowseDate(cell.key); setHistTab('browse') }}
+                      title={tip}
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: 2,
+                        backgroundColor: bg,
+                        opacity,
+                        cursor: 'pointer',
+                        transition: 'opacity 0.15s',
+                      }}
+                    />
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+
+          {/* Legend */}
+          <div className="flex items-center gap-2 mt-3">
+            <span className="text-[9px] text-ink-3">Less</span>
+            {[0, 0.2, 0.45, 0.72, 1].map((op, i) => (
+              <div key={i} style={{
+                width: 10, height: 10, borderRadius: 2,
+                backgroundColor: op === 0 ? '#1a1a28' : '#e8c547',
+                opacity: op === 0 ? 1 : op,
+              }} />
+            ))}
+            <span className="text-[9px] text-ink-3">More</span>
+            <span className="text-[9px] text-ink-3 ml-2">· tap to browse</span>
+          </div>
         </div>
       )}
     </div>
