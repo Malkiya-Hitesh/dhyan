@@ -1,13 +1,15 @@
 // components/BottomNav.jsx
 import { useRef, useEffect } from 'react'
 import { HiHome, HiCheckCircle, HiChartBar, HiFlag, HiPencil } from 'react-icons/hi'
+import { BsInfinity } from 'react-icons/bs'
 import gsap from 'gsap'
 
 const TABS = [
   { key: 'home',      label: 'Home',      Icon: HiHome },
   { key: 'tasks',     label: 'Tasks',     Icon: HiCheckCircle },
-  { key: 'dashboard', label: 'Analytics', Icon: HiChartBar },
+  { key: 'dashboard', label: 'Stats',     Icon: HiChartBar },
   { key: 'goals',     label: 'Goals',     Icon: HiFlag },
+  { key: 'infinity',  label: 'Infinity',  Icon: BsInfinity },
   { key: 'notes',     label: 'Notes',     Icon: HiPencil },
 ]
 
@@ -47,8 +49,8 @@ export default function BottomNav({ active, onChange }) {
             className={`flex-1 flex flex-col items-center justify-center gap-1 transition-colors duration-200
               ${active === key ? 'text-gold' : 'text-ink-2 hover:text-ink'}`}
           >
-            <Icon size={20} />
-            <span className="text-[9px] uppercase tracking-wider font-medium">{label}</span>
+            <Icon size={18} />
+            <span className="text-[8px] uppercase tracking-wider font-medium">{label}</span>
           </button>
         ))}
       </div>

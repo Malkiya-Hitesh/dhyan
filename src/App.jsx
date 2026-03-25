@@ -1,14 +1,15 @@
 // App.jsx
 import { useState, useEffect, useRef } from 'react'
 import { AppProvider, useApp } from './store/AppContext'
-import TopNav    from './components/TopNav'
-import BottomNav from './components/BottomNav'
-import Toast     from './components/ui/Toast'
-import Home      from './pages/Home'
-import Tasks     from './pages/Tasks'
-import Dashboard from './pages/Dashboard'
-import Goals     from './pages/Goals'
-import Notes     from './pages/Notes'
+import TopNav       from './components/TopNav'
+import BottomNav    from './components/BottomNav'
+import Toast        from './components/ui/Toast'
+import Home         from './pages/Home'
+import Tasks        from './pages/Tasks'
+import Dashboard    from './pages/Dashboard'
+import Goals        from './pages/Goals'
+import Notes        from './pages/Notes'
+import InfinityTimer from './pages/InfinityTimer'
 import { useToast } from './hooks/useToast'
 
 function AppInner() {
@@ -19,36 +20,29 @@ function AppInner() {
   const { toast, showToast } = useToast()
   const deferredPromptRef = useRef(null)
 
-  // App install and online status
   useEffect(() => {
     const onBeforeInstallPrompt = (e) => {
       e.preventDefault()
       deferredPromptRef.current = e
       setInstallReady(true)
     }
-
-    const onAppInstalled = () => {
-      setInstallReady(false)
-      showToast('Dhyan installed!')
-    }
-
-    const onOnline = () => setIsOnline(true)
+    const onAppInstalled = () => { setInstallReady(false); showToast('Dhyan installed!') }
+    const onOnline  = () => setIsOnline(true)
     const onOffline = () => setIsOnline(false)
 
     window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt)
     window.addEventListener('appinstalled', onAppInstalled)
-    window.addEventListener('online', onOnline)
+    window.addEventListener('online',  onOnline)
     window.addEventListener('offline', onOffline)
 
     return () => {
       window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt)
       window.removeEventListener('appinstalled', onAppInstalled)
-      window.removeEventListener('online', onOnline)
+      window.removeEventListener('online',  onOnline)
       window.removeEventListener('offline', onOffline)
     }
   }, [showToast])
 
-  // PWA install handler
   const handleInstall = async () => {
     const promptEvent = deferredPromptRef.current
     if (!promptEvent) return
@@ -59,7 +53,6 @@ function AppInner() {
     setInstallReady(false)
   }
 
-  // Loading state
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center bg-bg">
@@ -71,14 +64,15 @@ function AppInner() {
     )
   }
 
-  // Page configuration
-  const pages = { home: Home, tasks: Tasks, dashboard: Dashboard, goals: Goals, notes: Notes }
+  const pages = {
+    home: Home, tasks: Tasks, dashboard: Dashboard,
+    goals: Goals, notes: Notes, infinity: InfinityTimer,
+  }
   const ActivePage = pages[page] || Home
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-bg text-ink">
       <TopNav isOnline={isOnline} />
-      {/* PWA install banner */}
       {installReady && (
         <div className="bg-gold-dim border-b border-gold/20 px-4 py-2 flex items-center justify-between">
           <p className="text-xs text-ink">
@@ -90,12 +84,9 @@ function AppInner() {
           </button>
         </div>
       )}
-
-      {/* Scrollable content */}
       <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrolling-touch relative z-10">
         <ActivePage showToast={showToast} />
       </main>
-
       <BottomNav active={page} onChange={setPage} />
       <Toast msg={toast.msg} show={toast.show} />
     </div>
